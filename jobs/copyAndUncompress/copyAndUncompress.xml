@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<LOGDIVER>
+<program>
+	<name> CopyAndUncompress </name>
+	<isNamedParameters>FALSE</isNamedParameters>
+        <executable> /u/sciteam/sjha/projects/logdiver/clusters/TaskRunner/copyAndUncompress.sh  </executable>
+        <args>
+            <arg paramName="--in_file" fromFile="true">
+                /u/sciteam/sjha/projects/logdiver/clusters/TaskRunner/BlueWaters/rawlogs.files
+            </arg>
+            <arg paramName="--out_dir"> /u/sciteam/sjha/scratch/raw_syslogs/ </arg>
+        </args>
+</program>
+
+</LOGDIVER>

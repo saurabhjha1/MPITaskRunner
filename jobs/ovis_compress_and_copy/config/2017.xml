@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<LOGDIVER>
+<program>
+	<name> TrsfrOvis2017 </name>
+	<isNamedParameters>FALSE</isNamedParameters>
+        <executable> /u/sciteam/sjha/projects/TaskRunner/jobs/ovis_compress_and_copy/bin/transferOVIS.sh  </executable>
+        <args>
+            <arg paramName="--in_file" fromFile="true">
+                /u/sciteam/sjha/projects/TaskRunner/jobs/ovis_compress_and_copy/config/2017.files
+            </arg>
+            <arg paramName="--out_dir"> /u/sciteam/sjha/scratch/ovis/2017 </arg>
+        </args>
+</program>
+
+</LOGDIVER>

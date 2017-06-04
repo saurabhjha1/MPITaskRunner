@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<LOGDIVER>
+<program>
+	<name> SPLIT_ROUTINE </name>
+	<isNamedParameters>FALSE</isNamedParameters>
+        <executable> /u/sciteam/sjha/projects/logdiver/clusters/TaskRunner/split.sh  </executable>
+        <args>
+            <arg paramName="--in_file" fromFile="true">
+                /u/sciteam/sjha/projects/logdiver/clusters/TaskRunner/BlueWaters/crayUncompressed.files 
+            </arg>
+            <arg paramName="--out_dir"> /u/sciteam/sjha/scratch/results/cray_raw_split/ </arg>
+        </args>
+</program>
+
+</LOGDIVER>
