@@ -2,14 +2,14 @@
 <queues>
 <use-queue> torque </use-queue>
 <torque name = "PBS">
-        <nodes attribute = "l nodes="> 10 </nodes>
-        <walltime attribute = "l walltime="> 02:00:00 </walltime>
+        <nodes attribute = "l nodes="> 31 </nodes>
+        <walltime attribute = "l walltime="> 01:00:00 </walltime>
         <mail-type attribute = "m "> bea </mail-type>
         <mail-user attribute = "M "> sjha8@illinois.edu</mail-user>
-        <account attribute = "A ">bahy</account>
+        <account attribute = "A ">bapp</account>
         <launcher>
             <launch> aprun </launch>
-            <numProcsPerNode> 32 </numProcsPerNode>
+            <numProcsPerNode> 1 </numProcsPerNode>
             <cpuPerTask attribute ="-d"> 2 </cpuPerTask>
         </launcher>
         <modules>
@@ -21,10 +21,6 @@
             </unload>
             <load>
                 PrgEnv-gnu/5.2.82,
-                autoconf/2.69,
-                automake/1.14,
-                boost/1.53.0,
-                cmake/3.1.3,
                 bwpy,
                 bwpy-mpi
             </load>

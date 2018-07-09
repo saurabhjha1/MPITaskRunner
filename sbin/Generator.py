@@ -3,7 +3,7 @@
 import os 
 import sys
 
-from Queue import Queue
+#from Queue import Queue
 import subprocess
 import itertools
 from pprint import pprint
@@ -63,10 +63,10 @@ class Task:
         parameterString = executableName + " "
         numArgs = len(args)
         #print(numArgs)
-        for argNum in xrange(0,numArgs):
+        for argNum in range(0,numArgs):
             arg = args[argNum]
             numParams = len(arg)
-            for paramNum in xrange(0,numParams):
+            for paramNum in range(0,numParams):
                 parameterString += " " + arg[paramNum]
         self.runCommandName = parameterString
         self.result.runCommandName = parameterString
@@ -101,15 +101,15 @@ class Generator:
     """
     The goal of the generator is to take in Program definition and vary the parameters to generate tasks
     """
-    taskQueue = Queue()
+    taskQueue = []
     taskList = []
 
     def __init__(self, program):
         formattedArguments = []
         if program.isNamedParameters == True:
-            programParameterValues = [ program.parameters[i][1] for i in xrange(0, len(program.parameters.keys())) ]
+            programParameterValues = [ program.parameters[i][1] for i in range(0, len(program.parameters.keys())) ]
             argumentSpace = itertools.product(*programParameterValues)
-            argHeader = [program.parameters[i][0] for i in xrange(0, len(program.parameters.keys()))]
+            argHeader = [program.parameters[i][0] for i in range(0, len(program.parameters.keys()))]
             numArgs = len(program.parameters.keys())
             for argSet in argumentSpace:
                 newArgSet = []
@@ -119,7 +119,7 @@ class Generator:
                     argNum += 1
                 formattedArguments.append(newArgSet)
         else:
-            programParameterValues = [ program.parameters[i][1] for i in xrange(0, len(program.parameters.keys())) ]
+            programParameterValues = [ program.parameters[i][1] for i in range(0, len(program.parameters.keys())) ]
             argumentSpace = itertools.product(*programParameterValues)
             numArgs = len(program.parameters.keys())
             for argSet in argumentSpace:
@@ -135,9 +135,9 @@ class Generator:
             t  = Task(program.executable, argSet, taskID)
             taskID += 1
             self.taskList.append(t)
-            self.taskQueue.put(t)
+            self.taskQueue.append(t)
             t.enqueue()
-        print("Total tasks queued = %d" % self.taskQueue.qsize())
+        print("Total tasks queued = %d" % len(self.taskQueue))
 
 def main():
     parser = argparse.ArgumentParser()
@@ -151,8 +151,12 @@ def main():
         programParams["isNamedParameters"],
         programParams["args"]
     )
-    g = Generator(p)
+    
     pprint(programParams)
+    g = Generator(p)
+    while(len(g.taskQueue) > 0):
+        print(g.taskQueue[0].runCommandName)
+        g.taskQueue.pop(0)
 if __name__ == "__main__":
     main()
 

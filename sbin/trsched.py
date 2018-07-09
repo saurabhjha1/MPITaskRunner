@@ -7,30 +7,46 @@ HPC.
 
 # enable local module importing
 import os
-import sys 
+import sys
 
 # load all modules
 import re
 import time
+
 from mpi4py import MPI
 from Generator import Program
 from Generator import Generator
-from pprint import  pprint
+from pprint import pprint
 from LDParser import parse_program
-import argparse 
+import argparse
 
-WORKTAG = 1
-DIETAG = 0
-KILLTAG = 2
-RESULTTAG = 3
-ACKTAG = 4
-NACKTAG = 5
-DEBUG = True
+MASTER_RANK = 0
+ANYTAG = 0
 
-def debugWrite(msg):
+DEBUG = False
+
+
+def debug_write(msg):
     if DEBUG:
-        ofh = open("/u/sciteam/sjha/scratch/logs/" + msg , 'w')
+        ofh = open("/u/sciteam/sjha/scratch/logs/" + msg, 'w')
         ofh.close()
+
+
+def send_to_slave(comm, slave_rank, msg):
+    comm.send(msg, dest = slave_rank, tag = ANYTAG)
+
+
+def recv_from_slave(comm, slave_rank):
+    return comm.recv(source = slave_rank, tag = ANYTAG)
+
+
+def send_from_slave(comm, msg):
+    comm.send(msg, dest = MASTER_RANK, tag = ANYTAG)
+
+
+def recv_from_master(comm):
+    return comm.recv(source = MASTER_RANK, tag = ANYTAG)
+
 
 def master(comm, programParams):
     p = Program(
@@ -40,101 +56,94 @@ def master(comm, programParams):
         programParams["isNamedParameters"],
         programParams["args"]
     )
-    print("program name", programParams["name"])
-    print("executable", programParams["executable"])
-    
-    g = Generator(p)
-    num_procs = min(comm.Get_size(), g.taskQueue.qsize())
-    status = MPI.Status()
 
-    print("CommSize = %d, Num tasks = %d, required Processes = %d" % (comm.Get_size(), g.taskQueue.qsize(), num_procs)) 
+    g = Generator(p)
+    num_procs = min(comm.Get_size(), len(g.taskQueue) + 1)
+
+    print("CommSize = %d, Num tasks = %d, required Processes = %d" % (comm.Get_size(), len(g.taskQueue), num_procs))
     # edge case when numtasks are greater than num tasks
-    if (comm.Get_size() - g.taskQueue.qsize() > 0) :
-        print("killing extra processes = %d" % (comm.Get_size() - g.taskQueue.qsize()))
+    if comm.Get_size() - (len(g.taskQueue) + 1) > 0: #master just dispatches so add dispatching as a task
+        print("killing extra processes = %d" % (comm.Get_size() - len(g.taskQueue)))
         print("should not reach here in general. More of an exception than a rule")
-        for rank in xrange(g.taskQueue.qsize(), comm.Get_size()):
-            print("invalid rank = %d" % rank)
-            comm.send(0, dest=rank, tag=KILLTAG)
-    debugWrite("files_%d_size_%d" % (g.taskQueue.qsize(), num_procs))
+        for slave_rank in range(len(g.taskQueue) + 1,  comm.Get_size()):
+            send_to_slave(comm, slave_rank, [None, "DIE"])
+            msg = recv_from_slave(comm, slave_rank)
+            if msg[1] != "DIE":
+                print("Error occurred while killing in slave %d" % slave_rank)
+
+    # debugWrite("files_%d_size_%d" % (len(g.taskQueue), num_procs))
     # create mpi status for each for num procs
-    work_status = [ False for i in xrange(0, num_procs)]
-    processingTimes = {}  # contains rank -> tid -> (startime, endtime)
-    for i in xrange(0, num_procs):
-        processingTimes[i] = {}
-    currTid = [ -1 for i in xrange(0, num_procs)] # currenttid that each rank is processing 
+    work_status = [False] * num_procs
+    processing_times = {}  # contains rank -> tid -> (startime, endtime)
+    for i in range(1, num_procs):
+        processing_times[i] = {}
+    curr_tid = [-1] * num_procs  # currenttid that each rank is processing
     while True:
-        #time.sleep(1)
-        #Seed the slaves, send one unit of work to each slave (rank)
-        for rank in xrange(1, num_procs):
-            # make sure there is task in queue and that particular is not a;read processing and finally 
-            # a;so make sure thet isend does not have more than one outstanding outgoing message
-            if g.taskQueue.qsize() > 0 and work_status[rank] == False and sum(work_status) <= num_procs:
-                #mark the the mpi thread to be active in processing task
-                work = g.taskQueue.get()
-                work_status[rank] = True
-                comm.isend(work, dest=rank, tag=WORKTAG)
-                debugWrite("server_rank_%d_send_%s" % (rank, str(time.time())))
-                taskTid = work.result.taskId
-                currTid[rank] = taskTid
-                if taskTid not in processingTimes[rank].keys():
-                    processingTimes[rank][currTid[rank]] = [time.time(), time.time()]
-            if work_status[rank] == True:
+        if sum(work_status) == 0 and len(g.taskQueue) == 0:
+            break
+        # Seed the slaves, send one unit of work to each slave (rank)
+        for slave_rank in range(1, num_procs):
+            # make sure there is task in queue and that particular is not a;read processing and finally
+            # also make sure that isend does not have more than one outstanding outgoing message
+            # send part for the task
+            if len(g.taskQueue) > 0 and not work_status[slave_rank]:
+                work_status[slave_rank] = True
+                # mark the the mpi thread to be active in processing task
+                work = g.taskQueue.pop(0)
+                curr_tid[slave_rank] = work.result.taskId
+                print("master is sending %s to %d" % (work.runCommandName, slave_rank))
+                send_to_slave(comm, slave_rank, [work, "WORK"])
+                debug_write("server_rank_%d_send_%s" % (slave_rank, str(time.time())))
+                if work.result.taskId not in processing_times[slave_rank].keys():
+                    processing_times[slave_rank][curr_tid[slave_rank]] = [time.time(), time.time()]
+            # recv part
+            elif work_status[slave_rank]:
                 tStatus = MPI.Status()
-                comm.Iprobe(rank, RESULTTAG, tStatus)
-                if tStatus.Get_tag() == RESULTTAG:
-                    debugWrite("server_rank_%d_iprobe_%s" %(rank, str(time.time())))
-                    processingTimes[rank][currTid[rank]][1] = time.time() - processingTimes[rank][currTid[rank]][1] 
+                comm.Iprobe(slave_rank, 0, tStatus)
+                if tStatus.Get_tag() == 0:
+                    processing_times[slave_rank][curr_tid[slave_rank]][1] = time.time() - processing_times[slave_rank][curr_tid[slave_rank]][1]
+                    work_status[slave_rank] = False
                     try:
-                        result = comm.recv(source = rank, tag = RESULTTAG, status = tStatus)
-                        if result != None:
-                            print("Tid = %d result: cmd: %s, stdout: %s, exit status : %d" % (rank, result.runCommandName, result.stdOutErrLines, result.retval))
-                            debugWrite("server_rank_%d_recvd_%s" %(rank, str(time.time())))
-                        work_status[rank] = False
-                        comm.send(True, dest=rank, tag=ACKTAG)
+                        result = recv_from_slave(comm, slave_rank)
+                        if result[1] == "WORK":
+                            print("Tid = %d result: cmd: %s, stdout: %s, exit status : %d" % (
+                                slave_rank, result[0].runCommandName, result[0].stdOutErrLines, result[0].retval))
+                            debug_write("server_rank_%d_recvd_%s" % (slave_rank, str(time.time())))
                     except:
                         print("result corrupted, will try again")
-        if sum(work_status) == 0 and g.taskQueue.qsize() == 0:
-            break
-    for rank in xrange(1, num_procs):
-        debugWrite("client_rank_%d_KILL_SIG" % rank)
-        req = comm.send(0, dest=rank, tag=DIETAG)
-    pprint(processingTimes)    
+
+    for slave_rank in range(1, num_procs):
+        send_to_slave(comm, slave_rank, [None, "DIE"])
+    pprint(processing_times)
+
 
 def slave(comm):
     my_rank = comm.Get_rank()
     while True:
-        status = MPI.Status()
-        work = None
-        result = None
-        # Receive a message from the master
         try:
-            work = comm.recv(source=0, tag=MPI.ANY_TAG, status=status)
-            # Check the tag of the received message
-            if status.Get_tag() == KILLTAG: 
-                print("Rank = %d, server forced kill" % my_rank)
-                break
+            msg = recv_from_master(comm)
+            if msg[1] == "DIE":
+                send_from_slave(comm, [None, "DIE"])
+                return
+            elif msg[1] == "WORK":
+                work = msg[0]
+                print("Tid = %d start: doing task %d, cmd : %s" % (my_rank, work.result.taskId, work.runCommandName))
+                # Do the work
+                debug_write("client_rank_%d_ws_%s" % (my_rank, str(time.time())))
+                result = work.start()
+                send_from_slave(comm, [result, "WORK"])
 
-            if status.Get_tag() == DIETAG: 
-                debugWrite("Rank_%d_quiting_%s" % (my_rank, str(time.time())))
-                break
+        except Exception as e:
+            exc_type, exc_obj, exc_tb = sys.exc_info()
+            fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+            print(exc_type, fname, exc_tb.tb_lineno)
+            print("MESSAGE CORRUPTED")
+            send_from_slave(comm, [None, "ERROR"])
 
-            print("Tid = %d start: doing task %d, cmd : %s" %(my_rank, work.result.taskId, work.runCommandName))
-            # Do the work
-            debugWrite("client_rank_%d_ws_%s" % (my_rank, str(time.time())))
-            result = work.start()
-            comm.send(result, dest=0, tag=RESULTTAG)
-            while True: # make sure the master recieved the result
-                ackmsg = comm.recv(source = 0, tag = ACKTAG, status=status)
-                if ackmsg == True:
-                    break
-        except:
-             print("MESSAGE CORRUPTED")
-             comm.send(None, dest=0, tag=RESULTTAG)
-    debugWrite("CLIENT_%d_EXIT" % my_rank)
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--pcfile", dest = "programConf", required = True)
+    parser.add_argument("--pcfile", dest="programConf", required=True)
     args = parser.parse_args()
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()

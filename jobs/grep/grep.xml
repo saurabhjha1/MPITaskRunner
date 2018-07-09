@@ -3,13 +3,13 @@
 <program>
 	<name> GREP_ROUTINE </name>
 	<isNamedParameters>FALSE</isNamedParameters>
-        <executable> /u/sciteam/sjha/projects/logdiver/clusters/TaskRunner/ldgrep.sh  </executable>
+        <executable>  /u/sciteam/sjha/projects/TaskRunner/bin/dgrep.sh  </executable>
         <args>
             <arg paramName="--in-files" fromFile="true">
                 /u/sciteam/sjha/projects/logdiver/clusters/TaskRunner/BlueWaters/cray_split.files
             </arg>
-            <arg paramName="--grep" > "warm swap aborted due to hardware failure during link initialization" </arg>
-            <arg paramName="--outDir"> /u/sciteam/sjha/scratch/results/grepws </arg>
+            <arg paramName="--grep" > "TOP_BANDWIDTH_APPS" </arg>
+            <arg paramName="--outDir"> /u/sciteam/sjha/scratch/results/grepws/ </arg>
         </args>
 </program>
 
